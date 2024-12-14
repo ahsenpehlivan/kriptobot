@@ -1,0 +1,116 @@
+//@version=6
+indicator(title = "buy_sell_signals", overlay = false, timeframe = "", timeframe_gaps = true)
+
+
+
+//wavetrend_with_cross
+
+n1 = input(10, "Channel Length")
+n2 = input(21, "Average Length")
+obLevel1 = input(60, "Over Bought Level 1")
+obLevel2 = input(53, "Over Bought Level 2")
+osLevel1 = input(-60, "Over Sold Level 1")
+osLevel2 = input(-53, "Over Sold Level 2")
+ 
+ap = hlc3 
+esa = ta.ema(ap, n1)
+d = ta.ema(math.abs(ap - esa), n1)
+ci = (ap - esa) / (0.015 * d)
+tci = ta.ema(ci, n2)
+ 
+wt1 = tci
+wt2 = ta.sma(wt1,4)
+
+plot(0, color=color.gray)
+plot(obLevel1, color=color.red)
+plot(osLevel1, color=color.green)
+plot(obLevel2, color=color.red)
+plot(osLevel2, color=color.green)
+
+plot(wt1, color=color.green)
+plot(wt2, color=color.red)
+plot(wt1-wt2, color=color.new(color.blue, 80), style= plot.style_area)
+plot(ta.cross(wt1, wt2) ? wt2 : na, color = color.black , style = plot.style_circles, linewidth = 3)
+plot(ta.cross(wt1, wt2) ? wt2 : na, color = (wt2 - wt1 > 0 ? color.red : color.lime) , style = plot.style_circles, linewidth = 2)
+barcolor(ta.cross(wt1, wt2) ? (wt2 - wt1 > 0 ? color.aqua : color.yellow) : na)
+
+
+
+//squeeze_momentum_indicator
+
+length = input(20, title="BB Length")
+mult = input(2.0,title="BB MultFactor")
+lengthKC=input(20, title="KC Length")
+multKC = input(1.5, title="KC MultFactor")
+
+useTrueRange = bool(input(true, title="Use TrueRange (KC)"))
+
+// Calculate BB
+source = close
+basis = ta.sma(source, length)
+dev = multKC * ta.stdev(source, length)
+upperBB = basis + dev
+lowerBB = basis - dev
+
+// Calculate KC
+ma = ta.sma(source, lengthKC)
+rangeas = useTrueRange ? ta.tr : (high - low)
+rangema = ta.sma(rangeas, lengthKC)
+upperKC = ma + rangema * multKC
+lowerKC = ma - rangema * multKC
+
+sqzOn  = (lowerBB > lowerKC) and (upperBB < upperKC)
+sqzOff = (lowerBB < lowerKC) and (upperBB > upperKC)
+noSqz  = (sqzOn == false) and (sqzOff == false)
+
+val = ta.linreg(source  -  math.avg(math.avg(ta.highest(high, lengthKC), ta.lowest(low, lengthKC)), ta.sma(close,lengthKC)), lengthKC,0)
+
+bcolor = if (val > 0)
+    if (val > nz(val[1]))
+        color.lime
+    else
+        color.green
+else
+    if (val < nz(val[1]))
+        color.red
+    else
+        color.maroon
+
+scolor = noSqz ? color.blue : sqzOn ? color.black : color.gray 
+plot(val, color=bcolor, style=plot.style_histogram, linewidth=4)
+plot(0, color=scolor, style=plot.style_cross, linewidth=2)
+
+
+
+//supertrend
+
+atrPeriod = input.int(10,    "ATR Length", minval = 1)
+factor =    input.float(3.0, "Factor",     minval = 0.01, step = 0.01)
+
+[supertrend, direction] = ta.supertrend(factor, atrPeriod)
+
+supertrend := barstate.isfirst ? na : supertrend
+upTrend =    plot(direction < 0 ? supertrend : na, "Up Trend",   color = color.green, style = plot.style_linebr)
+downTrend =  plot(direction < 0 ? na : supertrend, "Down Trend", color = color.red,   style = plot.style_linebr)
+bodyMiddle = plot(barstate.isfirst ? na : (open + close) / 2, "Body Middle",display = display.none)
+
+fill(bodyMiddle, upTrend,   color.new(color.green, 90), fillgaps = false)
+fill(bodyMiddle, downTrend, color.new(color.red,   90), fillgaps = false)
+
+alertcondition(direction[1] > direction, title='Downtrend to Uptrend', message='The Supertrend value switched from Downtrend to Uptrend ')
+alertcondition(direction[1] < direction, title='Uptrend to Downtrend', message='The Supertrend value switched from Uptrend to Downtrend')
+alertcondition(direction[1] != direction, title='Trend Change', message='The Supertrend value switched from Uptrend to Downtrend or vice versa')
+
+
+
+//wavetrend_with_cross Conditions
+// WT1 Overbought/Oversold Conditions
+isOverbought = wt1 > obLevel2
+isOversold = wt1 < osLevel2
+
+// Cross Conditions
+bullishCross = ta.cross(wt1, wt2) and wt1 > wt2
+bearishCross = ta.cross(wt1, wt2) and wt1 < wt2
+
+wtBuySignal = isOversold and bullishCross
+wtSellSignal = isOverbought and bearishCross
